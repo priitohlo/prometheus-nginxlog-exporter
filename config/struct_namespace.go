@@ -27,6 +27,7 @@ type NamespaceConfig struct {
 	Labels           map[string]string `hcl:"labels" yaml:"labels"`
 	RelabelConfigs   []RelabelConfig   `hcl:"relabel" yaml:"relabel_configs"`
 	HistogramBuckets []float64         `hcl:"histogram_buckets" yaml:"histogram_buckets"`
+	ResponseTimeUnits	string			`hcl:"response_time_units" yaml:"response_time_units"`
 
 	PrintLog bool `hcl:"print_log" yaml:"print_log"`
 

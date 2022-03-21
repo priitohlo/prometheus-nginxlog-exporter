@@ -190,7 +190,9 @@ func main() {
 	flag.StringVar(&opts.CPUProfile, "cpuprofile", "", "write cpu profile to `file`")
 	flag.StringVar(&opts.MemProfile, "memprofile", "", "write memory profile to `file`")
 	flag.StringVar(&opts.MetricsEndpoint, "metrics-endpoint", cfg.Listen.MetricsEndpoint, "URL path at which to serve metrics")
+	flag.StringVar(&opts.ResponseTimeUnits, "response-time-units", "s", "Units to use for parsing response time")
 	flag.BoolVar(&opts.VerifyConfig, "verify-config", false, "Enable this flag to check config file loads, then exit")
+	
 	flag.Parse()
 
 	opts.Filenames = flag.Args()
@@ -241,7 +243,7 @@ func main() {
 		nsGatherers = append(nsGatherers, nsMetrics.registry)
 
 		fmt.Printf("starting listener for namespace %s\n", ns.Name)
-		go processNamespace(ns, &(nsMetrics.Metrics))
+		go processNamespace(ns, &(nsMetrics.Metrics), opts)
 	}
 
 	listenAddr := fmt.Sprintf("%s:%d", cfg.Listen.Address, cfg.Listen.Port)
@@ -300,7 +302,7 @@ func setupConsul(cfg *config.Config, stopChan <-chan bool, stopHandlers *sync.Wa
 	stopHandlers.Add(1)
 }
 
-func processNamespace(nsCfg config.NamespaceConfig, metrics *Metrics) {
+func processNamespace(nsCfg config.NamespaceConfig, metrics *Metrics, opts config.StartupFlags) {
 	var followers []tail.Follower
 
 	parser := parser.NewParser(nsCfg)
@@ -351,12 +353,12 @@ func processNamespace(nsCfg config.NamespaceConfig, metrics *Metrics) {
 	}
 
 	for _, f := range followers {
-		go processSource(nsCfg, f, parser, metrics, hasCounterOnlyLabels)
+		go processSource(nsCfg, f, parser, metrics, hasCounterOnlyLabels, opts)
 	}
 
 }
 
-func processSource(nsCfg config.NamespaceConfig, t tail.Follower, parser parser.Parser, metrics *Metrics, hasCounterOnlyLabels bool) {
+func processSource(nsCfg config.NamespaceConfig, t tail.Follower, parser parser.Parser, metrics *Metrics, hasCounterOnlyLabels bool, opts config.StartupFlags) {
 	relabelings := relabeling.NewRelabelings(nsCfg.RelabelConfigs)
 	relabelings = append(relabelings, relabeling.DefaultRelabelings...)
 	relabelings = relabeling.UniqueRelabelings(relabelings)
@@ -413,6 +415,12 @@ func processSource(nsCfg config.NamespaceConfig, t tail.Follower, parser parser.
 		}
 
 		if v, ok := observeMetrics(fields, "request_time", floatFromFields, metrics.parseErrorsTotal); ok {
+			switch opts.ResponseTimeUnits {
+			case "ms":
+				v = v / 1000
+			case "us":
+				v = v / 1000000
+			}
 			metrics.responseSeconds.WithLabelValues(notCounterValues...).Observe(v)
 			metrics.responseSecondsHist.WithLabelValues(notCounterValues...).Observe(v)
 		}
